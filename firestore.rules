@@ -1,0 +1,552 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Pillar 3 & Primitive helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerEmail() {
+      return isSignedIn()
+        && ('email' in request.auth.token)
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'treevanderveer@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isOwnerEmail()
+        || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidLeadStatus(status) {
+      return status in [
+        'New',
+        'Estimate Sent',
+        'Booked',
+        'In Progress',
+        'Completed',
+        'Paid'
+      ];
+    }
+
+    // Validation Blueprint for public create (strictly enforces 'New' status and zero admin-only shadow fields)
+    function isValidEstimateCreate(data, requestId) {
+      return data.keys().hasAll([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'services',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'services',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.requestId == requestId
+        && isValidId(data.requestId)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 150
+        && data.preferredContact in ['call', 'text', 'email']
+        && data.services is list && data.services.size() >= 1 && data.services.size() <= 15
+        && data.services[0] is string && data.services[0].size() >= 2 && data.services[0].size() <= 140
+        && data.serviceType is string && data.serviceType.size() >= 2 && data.serviceType.size() <= 1000
+        && data.streetAddress is string && data.streetAddress.size() >= 3 && data.streetAddress.size() <= 200
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 80
+        && data.zipCode is string && data.zipCode.size() >= 5 && data.zipCode.size() <= 12
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 3000
+        && data.debrisHauling in ['yes', 'no', 'unsure']
+        && data.preferredDate is string && data.preferredDate.size() <= 20
+        && data.preferredTimeframe is string && data.preferredTimeframe.size() >= 2 && data.preferredTimeframe.size() <= 80
+        && data.additionalDetails is string && data.additionalDetails.size() <= 1500
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 5
+        && data.status == 'New'
+        && data.notificationStatus in ['sent', 'unconfigured', 'failed']
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    // Validation Blueprint for admin updates (backwards-compatible with leads created before 'services' array)
+    function isValidEstimateUpdate(data, prev) {
+      return data.keys().hasAll([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'services',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'internalNotes',
+          'estimateAmount',
+          'followUpDate',
+          'scheduledDate',
+          'scheduledTime',
+          'scheduledSlotKey',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.requestId == prev.requestId
+        && data.createdAt == prev.createdAt
+        && data.updatedAt == request.time
+        && isValidLeadStatus(data.status)
+        && (!('services' in data) || (data.services is list && data.services.size() >= 1 && data.services.size() <= 15 && data.services[0] is string))
+        && (!('internalNotes' in data) || (data.internalNotes is string && data.internalNotes.size() <= 4000))
+        && (!('estimateAmount' in data) || (data.estimateAmount is string && data.estimateAmount.size() <= 40))
+        && (!('followUpDate' in data) || (data.followUpDate is string && data.followUpDate.size() <= 20))
+        && (!('scheduledDate' in data) || (data.scheduledDate is string && data.scheduledDate.size() <= 20))
+        && (!('scheduledTime' in data) || (data.scheduledTime is string && data.scheduledTime.size() <= 40))
+        && (!('scheduledSlotKey' in data) || (data.scheduledSlotKey is string && data.scheduledSlotKey.size() <= 80));
+    }
+
+    function isValidEstimatePhoto(data, requestId, photoId) {
+      return data.keys().hasAll([
+          'photoId',
+          'requestId',
+          'fileName',
+          'mimeType',
+          'dataUrl',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'photoId',
+          'requestId',
+          'fileName',
+          'mimeType',
+          'dataUrl',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && data.photoId == photoId
+        && data.requestId == requestId
+        && isValidId(data.photoId)
+        && isValidId(data.requestId)
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 160
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && data.dataUrl is string && data.dataUrl.size() >= 32 && data.dataUrl.size() <= 600000
+        && data.dataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        && data.sizeBytes is int && data.sizeBytes >= 16 && data.sizeBytes <= 500000
+        && data.createdAt == request.time;
+    }
+
+    function isValidQuoteDocument(data, requestId, docId) {
+      return data.keys().hasAll([
+          'docId',
+          'requestId',
+          'docNumber',
+          'kind',
+          'status',
+          'lineItems',
+          'laborCents',
+          'materialsCents',
+          'disposalCents',
+          'haulAwayCents',
+          'subtotalCents',
+          'taxRatePercent',
+          'taxCents',
+          'totalCents',
+          'depositRequiredCents',
+          'balanceDueOnCompletionCents',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'docId',
+          'requestId',
+          'docNumber',
+          'kind',
+          'status',
+          'lineItems',
+          'laborCents',
+          'materialsCents',
+          'disposalCents',
+          'haulAwayCents',
+          'subtotalCents',
+          'taxRatePercent',
+          'taxCents',
+          'totalCents',
+          'depositRequiredCents',
+          'balanceDueOnCompletionCents',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.docId == docId
+        && data.requestId == requestId
+        && isValidId(data.docId)
+        && isValidId(data.requestId)
+        && data.docNumber is string && data.docNumber.size() >= 3 && data.docNumber.size() <= 60
+        && data.kind in ['estimate', 'invoice']
+        && data.status in ['draft', 'sent', 'approved', 'invoiced', 'paid']
+        && data.lineItems is list && data.lineItems.size() >= 1 && data.lineItems.size() <= 30
+        && data.lineItems[0] is map
+        && data.laborCents is int && data.laborCents >= 0 && data.laborCents <= 100000000
+        && data.materialsCents is int && data.materialsCents >= 0 && data.materialsCents <= 100000000
+        && data.disposalCents is int && data.disposalCents >= 0 && data.disposalCents <= 100000000
+        && data.haulAwayCents is int && data.haulAwayCents >= 0 && data.haulAwayCents <= 100000000
+        && data.subtotalCents is int && data.subtotalCents >= 0 && data.subtotalCents <= 100000000
+        && data.taxRatePercent is number && data.taxRatePercent >= 0 && data.taxRatePercent <= 25
+        && data.taxCents is int && data.taxCents >= 0 && data.taxCents <= 100000000
+        && data.totalCents is int && data.totalCents >= 0 && data.totalCents <= 100000000
+        && data.depositRequiredCents is int && data.depositRequiredCents >= 0 && data.depositRequiredCents <= 100000000
+        && data.balanceDueOnCompletionCents is int && data.balanceDueOnCompletionCents >= 0 && data.balanceDueOnCompletionCents <= 100000000
+        && data.notes is string && data.notes.size() <= 2000
+        && data.updatedAt == request.time;
+    }
+
+    function isValidJobPayment(data, requestId, paymentId) {
+      return data.keys().hasAll([
+          'paymentId',
+          'requestId',
+          'amountCents',
+          'date',
+          'method',
+          'paymentType',
+          'note',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId',
+          'requestId',
+          'amountCents',
+          'date',
+          'method',
+          'paymentType',
+          'note',
+          'createdAt'
+        ])
+        && data.paymentId == paymentId
+        && data.requestId == requestId
+        && isValidId(data.paymentId)
+        && isValidId(data.requestId)
+        && data.amountCents is int && data.amountCents >= 1 && data.amountCents <= 100000000
+        && data.date is string && data.date.size() >= 8 && data.date.size() <= 20
+        && data.method in ['Cash', 'Check', 'Card', 'Zelle', 'Venmo', 'ACH', 'Other']
+        && data.paymentType in ['deposit', 'balance']
+        && data.note is string && data.note.size() <= 500
+        && data.createdAt == request.time;
+    }
+
+    function isValidJobExpense(data, requestId, expenseId) {
+      return data.keys().hasAll([
+          'expenseId',
+          'requestId',
+          'description',
+          'amountCents',
+          'date',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'expenseId',
+          'requestId',
+          'description',
+          'amountCents',
+          'date',
+          'createdAt'
+        ])
+        && data.expenseId == expenseId
+        && data.requestId == requestId
+        && isValidId(data.expenseId)
+        && isValidId(data.requestId)
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 200
+        && data.amountCents is int && data.amountCents >= 0 && data.amountCents <= 100000000
+        && data.date is string && data.date.size() >= 8 && data.date.size() <= 20
+        && data.createdAt == request.time;
+    }
+
+    function isValidLeadContact(data, requestId, contactId) {
+      return data.keys().hasAll([
+          'contactId',
+          'requestId',
+          'date',
+          'channel',
+          'note',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'contactId',
+          'requestId',
+          'date',
+          'channel',
+          'note',
+          'createdAt'
+        ])
+        && data.contactId == contactId
+        && data.requestId == requestId
+        && isValidId(data.contactId)
+        && isValidId(data.requestId)
+        && data.date is string && data.date.size() >= 8 && data.date.size() <= 20
+        && data.channel in ['Call', 'Text', 'Email', 'In Person']
+        && data.note is string && data.note.size() >= 1 && data.note.size() <= 1000
+        && data.createdAt == request.time;
+    }
+
+    function isValidBookedSlot(data, slotKey) {
+      return data.keys().hasAll([
+          'slotKey',
+          'requestId',
+          'customerName',
+          'city',
+          'scheduledDate',
+          'scheduledTime',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'slotKey',
+          'requestId',
+          'customerName',
+          'city',
+          'scheduledDate',
+          'scheduledTime',
+          'updatedAt'
+        ])
+        && data.slotKey == slotKey
+        && isValidId(data.slotKey)
+        && isValidId(data.requestId)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 80
+        && data.scheduledDate is string && data.scheduledDate.size() >= 8 && data.scheduledDate.size() <= 20
+        && data.scheduledTime is string && data.scheduledTime.size() >= 2 && data.scheduledTime.size() <= 40
+        && data.updatedAt == request.time;
+    }
+
+    function isValidServiceOverride(data, serviceId) {
+      return data.keys().hasAll(['serviceId', 'title', 'shortTitle', 'oneLiner', 'updatedAt'])
+        && data.keys().hasOnly(['serviceId', 'title', 'shortTitle', 'oneLiner', 'updatedAt'])
+        && data.serviceId == serviceId
+        && isValidId(data.serviceId)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 140
+        && data.shortTitle is string && data.shortTitle.size() >= 2 && data.shortTitle.size() <= 80
+        && data.oneLiner is string && data.oneLiner.size() >= 5 && data.oneLiner.size() <= 400
+        && data.updatedAt == request.time;
+    }
+
+    function isValidPricingOverride(data, pricingKey) {
+      return data.keys().hasAll(['pricingKey', 'label', 'startingDisplay', 'notes', 'updatedAt'])
+        && data.keys().hasOnly(['pricingKey', 'label', 'startingDisplay', 'notes', 'updatedAt'])
+        && data.pricingKey == pricingKey
+        && isValidId(data.pricingKey)
+        && data.label is string && data.label.size() >= 2 && data.label.size() <= 160
+        && data.startingDisplay is string && data.startingDisplay.size() >= 2 && data.startingDisplay.size() <= 160
+        && data.notes is string && data.notes.size() <= 400
+        && data.updatedAt == request.time;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list, create, update, delete: if false;
+    }
+
+    // Public catalog overrides (non-PII service titles/descriptions & starting estimates; owner-write only)
+    match /serviceCatalog/{serviceId} {
+      allow get: if isValidId(serviceId);
+      allow list: if true;
+      allow create: if isAdmin() && isValidId(serviceId) && isValidServiceOverride(incoming(), serviceId);
+      allow update: if isAdmin() && isValidId(serviceId) && isValidServiceOverride(incoming(), serviceId)
+        && incoming().serviceId == existing().serviceId;
+      allow delete: if isAdmin() && isValidId(serviceId);
+    }
+
+    match /pricingCatalog/{pricingKey} {
+      allow get: if isValidId(pricingKey);
+      allow list: if true;
+      allow create: if isAdmin() && isValidId(pricingKey) && isValidPricingOverride(incoming(), pricingKey);
+      allow update: if isAdmin() && isValidId(pricingKey) && isValidPricingOverride(incoming(), pricingKey)
+        && incoming().pricingKey == existing().pricingKey;
+      allow delete: if isAdmin() && isValidId(pricingKey);
+    }
+
+    // Owner-only booked schedule slots (double-booking prevented at both doc key and rule level)
+    match /bookedSlots/{slotKey} {
+      allow get: if isAdmin() && isValidId(slotKey);
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(slotKey)
+        && isValidBookedSlot(incoming(), slotKey)
+        && exists(/databases/$(database)/documents/estimateRequests/$(incoming().requestId));
+      allow update: if isAdmin()
+        && isValidId(slotKey)
+        && isValidBookedSlot(incoming(), slotKey)
+        && incoming().requestId == existing().requestId;
+      allow delete: if isAdmin() && isValidId(slotKey);
+    }
+
+    match /estimateRequests/{requestId} {
+      // Strictly private: only verified owner/admin can read or list customer leads
+      allow get: if isAdmin() && isValidId(requestId);
+      allow list: if isAdmin();
+
+      // Public lead submission: validated strictly on schema, bounds, initial status, and server timestamp
+      allow create: if isValidId(requestId) && isValidEstimateCreate(incoming(), requestId);
+
+      // Owner-only pipeline updates (notes, status, estimate amount, follow-up date, schedule)
+      allow update: if isAdmin()
+        && isValidId(requestId)
+        && isValidEstimateUpdate(incoming(), existing())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status',
+          'internalNotes',
+          'estimateAmount',
+          'followUpDate',
+          'scheduledDate',
+          'scheduledTime',
+          'scheduledSlotKey',
+          'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(requestId);
+
+      match /photos/{photoId} {
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(photoId);
+        allow list: if isAdmin() && isValidId(requestId);
+        allow create: if isValidId(requestId)
+          && isValidId(photoId)
+          && isValidEstimatePhoto(incoming(), requestId, photoId)
+          && existsAfter(/databases/$(database)/documents/estimateRequests/$(requestId))
+          && getAfter(/databases/$(database)/documents/estimateRequests/$(requestId)).data.photoCount >= 1;
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(photoId);
+      }
+
+      match /quotes/{docId} {
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(docId);
+        allow list: if isAdmin() && isValidId(requestId);
+        allow create: if isAdmin()
+          && isValidId(requestId)
+          && isValidId(docId)
+          && isValidQuoteDocument(incoming(), requestId, docId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/estimateRequests/$(requestId));
+        allow update: if isAdmin()
+          && isValidId(requestId)
+          && isValidId(docId)
+          && isValidQuoteDocument(incoming(), requestId, docId)
+          && incoming().createdAt == existing().createdAt
+          && incoming().docId == existing().docId
+          && incoming().requestId == existing().requestId;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(docId);
+      }
+
+      match /payments/{paymentId} {
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(paymentId);
+        allow list: if isAdmin() && isValidId(requestId);
+        allow create: if isAdmin()
+          && isValidId(requestId)
+          && isValidId(paymentId)
+          && isValidJobPayment(incoming(), requestId, paymentId)
+          && exists(/databases/$(database)/documents/estimateRequests/$(requestId));
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(paymentId);
+      }
+
+      match /expenses/{expenseId} {
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(expenseId);
+        allow list: if isAdmin() && isValidId(requestId);
+        allow create: if isAdmin()
+          && isValidId(requestId)
+          && isValidId(expenseId)
+          && isValidJobExpense(incoming(), requestId, expenseId)
+          && exists(/databases/$(database)/documents/estimateRequests/$(requestId));
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(expenseId);
+      }
+
+      match /contacts/{contactId} {
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(contactId);
+        allow list: if isAdmin() && isValidId(requestId);
+        allow create: if isAdmin()
+          && isValidId(requestId)
+          && isValidId(contactId)
+          && isValidLeadContact(incoming(), requestId, contactId)
+          && exists(/databases/$(database)/documents/estimateRequests/$(requestId));
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(contactId);
+      }
+    }
+  }
+}

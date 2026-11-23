@@ -1,0 +1,349 @@
+{
+  "entities": {
+    "EstimateRequest": {
+      "title": "EstimateRequest",
+      "description": "A private customer estimate and job record submitted through the MOW & MEND LLC website.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique human-readable lead confirmation ID (e.g. MM-2026-4821)."
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 5,
+          "maxLength": 150
+        },
+        "preferredContact": {
+          "type": "string",
+          "enum": ["call", "text", "email"]
+        },
+        "services": {
+          "type": "array",
+          "description": "List of selected yard or handyman services (1 to 15)."
+        },
+        "serviceType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 1000,
+          "description": "Joined summary string of selected services."
+        },
+        "streetAddress": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "city": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "zipCode": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 12
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 3000
+        },
+        "debrisHauling": {
+          "type": "string",
+          "enum": ["yes", "no", "unsure"]
+        },
+        "preferredDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "preferredTimeframe": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "additionalDetails": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "photoCount": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["New", "Estimate Sent", "Booked", "In Progress", "Completed", "Paid"]
+        },
+        "notificationStatus": {
+          "type": "string",
+          "enum": ["sent", "unconfigured", "failed"]
+        },
+        "internalNotes": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "estimateAmount": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "followUpDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "scheduledDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "scheduledTime": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "scheduledSlotKey": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "requestId",
+        "customerName",
+        "phone",
+        "email",
+        "preferredContact",
+        "services",
+        "serviceType",
+        "streetAddress",
+        "city",
+        "zipCode",
+        "description",
+        "debrisHauling",
+        "preferredDate",
+        "preferredTimeframe",
+        "additionalDetails",
+        "photoCount",
+        "status",
+        "notificationStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EstimatePhoto": {
+      "title": "EstimatePhoto",
+      "description": "Private project photo attached to an estimate request (compressed base64 dataUrl stored in Firestore).",
+      "type": "object",
+      "properties": {
+        "photoId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+        "dataUrl": { "type": "string", "minLength": 32, "maxLength": 600000 },
+        "sizeBytes": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["photoId", "requestId", "fileName", "mimeType", "dataUrl", "sizeBytes", "createdAt"]
+    },
+    "QuoteDocument": {
+      "title": "QuoteDocument",
+      "description": "Owner-created written estimate or invoice attached to a lead reference (MM-YYYY-XXXX).",
+      "type": "object",
+      "properties": {
+        "docId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40 },
+        "docNumber": { "type": "string", "minLength": 3, "maxLength": 60 },
+        "kind": { "type": "string", "enum": ["estimate", "invoice"] },
+        "status": { "type": "string", "enum": ["draft", "sent", "approved", "invoiced", "paid"] },
+        "lineItems": { "type": "array" },
+        "laborCents": { "type": "integer" },
+        "materialsCents": { "type": "integer" },
+        "disposalCents": { "type": "integer" },
+        "haulAwayCents": { "type": "integer" },
+        "subtotalCents": { "type": "integer" },
+        "taxRatePercent": { "type": "number" },
+        "taxCents": { "type": "integer" },
+        "totalCents": { "type": "integer" },
+        "depositRequiredCents": { "type": "integer" },
+        "balanceDueOnCompletionCents": { "type": "integer" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "docId",
+        "requestId",
+        "docNumber",
+        "kind",
+        "status",
+        "lineItems",
+        "laborCents",
+        "materialsCents",
+        "disposalCents",
+        "haulAwayCents",
+        "subtotalCents",
+        "taxRatePercent",
+        "taxCents",
+        "totalCents",
+        "depositRequiredCents",
+        "balanceDueOnCompletionCents",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "JobPayment": {
+      "title": "JobPayment",
+      "description": "Owner-recorded deposit or balance payment against a job.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40 },
+        "amountCents": { "type": "integer" },
+        "date": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "method": { "type": "string", "enum": ["Cash", "Check", "Card", "Zelle", "Venmo", "ACH", "Other"] },
+        "paymentType": { "type": "string", "enum": ["deposit", "balance"] },
+        "note": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentId", "requestId", "amountCents", "date", "method", "paymentType", "note", "createdAt"]
+    },
+    "JobExpense": {
+      "title": "JobExpense",
+      "description": "Owner-recorded materials and job expenses feeding into job cost tracking.",
+      "type": "object",
+      "properties": {
+        "expenseId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "amountCents": { "type": "integer" },
+        "date": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["expenseId", "requestId", "description", "amountCents", "date", "createdAt"]
+    },
+    "LeadContact": {
+      "title": "LeadContact",
+      "description": "Owner-logged customer communication history entry.",
+      "type": "object",
+      "properties": {
+        "contactId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40 },
+        "date": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "channel": { "type": "string", "enum": ["Call", "Text", "Email", "In Person"] },
+        "note": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["contactId", "requestId", "date", "channel", "note", "createdAt"]
+    },
+    "BookedSlot": {
+      "title": "BookedSlot",
+      "description": "Owner-only schedule lock keyed by date_time to prevent double-booking.",
+      "type": "object",
+      "properties": {
+        "slotKey": { "type": "string", "minLength": 4, "maxLength": 80 },
+        "requestId": { "type": "string", "minLength": 6, "maxLength": 40 },
+        "customerName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "city": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "scheduledDate": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "scheduledTime": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slotKey", "requestId", "customerName", "city", "scheduledDate", "scheduledTime", "updatedAt"]
+    },
+    "ServiceOverride": {
+      "title": "ServiceOverride",
+      "description": "Publicly readable owner override for a service name and one-line description.",
+      "type": "object",
+      "properties": {
+        "serviceId": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "shortTitle": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "oneLiner": { "type": "string", "minLength": 5, "maxLength": 400 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["serviceId", "title", "shortTitle", "oneLiner", "updatedAt"]
+    },
+    "PricingOverride": {
+      "title": "PricingOverride",
+      "description": "Publicly readable owner override for a starting price entry.",
+      "type": "object",
+      "properties": {
+        "pricingKey": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "label": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "startingDisplay": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "notes": { "type": "string", "maxLength": 400 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pricingKey", "label", "startingDisplay", "notes", "updatedAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Explicitly authorized owner/admin UID record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["owner"] }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/estimateRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/EstimateRequest" },
+      "description": "Private customer estimate leads. Public create-only with strict schema/size checks; read/list/update/delete restricted strictly to verified owner/admin."
+    },
+    "/estimateRequests/{requestId}/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/EstimatePhoto" },
+      "description": "Private customer project photos linked atomically to parent estimateRequests."
+    },
+    "/estimateRequests/{requestId}/quotes/{docId}": {
+      "schema": { "$ref": "#/entities/QuoteDocument" },
+      "description": "Owner-only itemized estimates and invoices linked to parent lead."
+    },
+    "/estimateRequests/{requestId}/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/JobPayment" },
+      "description": "Owner-only deposit and balance payments per job."
+    },
+    "/estimateRequests/{requestId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/JobExpense" },
+      "description": "Owner-only job materials and expenses."
+    },
+    "/estimateRequests/{requestId}/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/LeadContact" },
+      "description": "Owner-only customer contact log per lead."
+    },
+    "/bookedSlots/{slotKey}": {
+      "schema": { "$ref": "#/entities/BookedSlot" },
+      "description": "Owner-only scheduled job slots preventing double-booking."
+    },
+    "/serviceCatalog/{serviceId}": {
+      "schema": { "$ref": "#/entities/ServiceOverride" },
+      "description": "Publicly readable service catalog overrides editable only by verified owner."
+    },
+    "/pricingCatalog/{pricingKey}": {
+      "schema": { "$ref": "#/entities/PricingOverride" },
+      "description": "Publicly readable pricing guide overrides editable only by verified owner."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Owner/admin role lookup documents."
+    }
+  }
+}

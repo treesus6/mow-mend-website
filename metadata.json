@@ -1,0 +1,8 @@
+{
+  "name": "Remix MOW \u0026 MEND LLC",
+  "description": "Yard maintenance, cleanups, pressure washing, fence repair, and handyman services in Vancouver, WA and Clark County.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

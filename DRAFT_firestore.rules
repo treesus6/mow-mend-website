@@ -1,0 +1,247 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Pillar 3 & Primitive helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'treevanderveer@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidLeadStatus(status) {
+      return status in [
+        'New',
+        'Contacted',
+        'Estimate Scheduled',
+        'Quoted',
+        'Approved',
+        'Scheduled',
+        'In Progress',
+        'Completed',
+        'Paid',
+        'Declined',
+        'Canceled'
+      ];
+    }
+
+    // Validation Blueprint for public create (strictly enforces 'New' status and zero admin-only shadow fields)
+    function isValidEstimateCreate(data, requestId) {
+      return data.keys().hasAll([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.requestId == requestId
+        && isValidId(data.requestId)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 150
+        && data.preferredContact in ['call', 'text', 'email']
+        && data.serviceType is string && data.serviceType.size() >= 2 && data.serviceType.size() <= 120
+        && data.streetAddress is string && data.streetAddress.size() >= 3 && data.streetAddress.size() <= 200
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 80
+        && data.zipCode is string && data.zipCode.size() >= 5 && data.zipCode.size() <= 12
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 3000
+        && data.debrisHauling in ['yes', 'no', 'unsure']
+        && data.preferredDate is string && data.preferredDate.size() <= 20
+        && data.preferredTimeframe is string && data.preferredTimeframe.size() >= 2 && data.preferredTimeframe.size() <= 80
+        && data.additionalDetails is string && data.additionalDetails.size() <= 1500
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 5
+        && data.status == 'New'
+        && data.notificationStatus in ['sent', 'unconfigured', 'failed']
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    // Validation Blueprint for admin updates (wraps entire update block)
+    function isValidEstimateUpdate(data, prev) {
+      return data.keys().hasAll([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId',
+          'customerName',
+          'phone',
+          'email',
+          'preferredContact',
+          'serviceType',
+          'streetAddress',
+          'city',
+          'zipCode',
+          'description',
+          'debrisHauling',
+          'preferredDate',
+          'preferredTimeframe',
+          'additionalDetails',
+          'photoCount',
+          'status',
+          'notificationStatus',
+          'internalNotes',
+          'estimateAmount',
+          'followUpDate',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.requestId == prev.requestId
+        && data.createdAt == prev.createdAt
+        && data.updatedAt == request.time
+        && isValidLeadStatus(data.status)
+        && (!('internalNotes' in data) || (data.internalNotes is string && data.internalNotes.size() <= 4000))
+        && (!('estimateAmount' in data) || (data.estimateAmount is string && data.estimateAmount.size() <= 40))
+        && (!('followUpDate' in data) || (data.followUpDate is string && data.followUpDate.size() <= 20));
+    }
+
+    function isValidEstimatePhoto(data, requestId, photoId) {
+      return data.keys().hasAll([
+          'photoId',
+          'requestId',
+          'fileName',
+          'mimeType',
+          'dataUrl',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'photoId',
+          'requestId',
+          'fileName',
+          'mimeType',
+          'dataUrl',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && data.photoId == photoId
+        && data.requestId == requestId
+        && isValidId(data.photoId)
+        && isValidId(data.requestId)
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 160
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && data.dataUrl is string && data.dataUrl.size() >= 32 && data.dataUrl.size() <= 600000
+        && data.dataUrl.matches('^data:image\\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        && data.sizeBytes is int && data.sizeBytes >= 16 && data.sizeBytes <= 500000
+        && data.createdAt == request.time;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list, create, update, delete: if false;
+    }
+
+    match /estimateRequests/{requestId} {
+      // Strictly private: only verified owner/admin can read or list customer leads
+      allow get: if isAdmin() && isValidId(requestId);
+      allow list: if isAdmin();
+
+      // Public lead submission: validated strictly on schema, bounds, initial status, and server timestamp
+      allow create: if isValidId(requestId) && isValidEstimateCreate(incoming(), requestId);
+
+      // Owner-only pipeline updates (notes, status, estimate amount, follow-up date)
+      allow update: if isAdmin()
+        && isValidId(requestId)
+        && isValidEstimateUpdate(incoming(), existing())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status',
+          'internalNotes',
+          'estimateAmount',
+          'followUpDate',
+          'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(requestId);
+
+      match /photos/{photoId} {
+        // Strictly private: customer project photos never publicly readable
+        allow get: if isAdmin() && isValidId(requestId) && isValidId(photoId);
+        allow list: if isAdmin() && isValidId(requestId);
+
+        // Atomic binding to parent estimate request
+        allow create: if isValidId(requestId)
+          && isValidId(photoId)
+          && isValidEstimatePhoto(incoming(), requestId, photoId)
+          && existsAfter(/databases/$(database)/documents/estimateRequests/$(requestId))
+          && getAfter(/databases/$(database)/documents/estimateRequests/$(requestId)).data.photoCount >= 1;
+
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(requestId) && isValidId(photoId);
+      }
+    }
+  }
+}
